@@ -25,6 +25,8 @@ NEXT_PUBLIC_RAZORPAY_KEY_ID=...
 RAZORPAY_WEBHOOK_SECRET=...
 ```
 
+For local checkout, these Razorpay variables must be present in `.env.local` (not `.env.example`). Get `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and the public key ID from Razorpay Dashboard -> Test Mode -> Account & Settings -> API Keys. The checkout route returns a configuration message instead of attempting payment when any of these values is missing.
+
 Never commit `.env.local` or expose server keys through `NEXT_PUBLIC_` variables. Configure the Razorpay webhook URL as `https://<deployment>/api/webhooks/razorpay` and subscribe to `payment.captured`, `payment.failed`, and `order.paid`.
 
 ## Demo routes
