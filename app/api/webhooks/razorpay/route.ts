@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { audit, safeEqual } from '@/lib/commerce';
+import { audit, safeEqual, sessionForRazorpayOrder } from '@/lib/commerce';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
@@ -25,8 +25,9 @@ export async function POST(request: NextRequest) {
     const update = status === 'paid' && payment?.id ? { status, razorpay_payment_id: payment.id } : { status };
     const { data: order } = await supabaseAdmin.from('orders').update(update)
       .eq('razorpay_order_id', razorpayOrderId).neq('status', 'paid')
-      .select('id,session_id,amount,status,razorpay_payment_id').maybeSingle();
-    if (order) await audit(order.session_id, status === 'paid' ? 'PAYMENT_SUCCESS' : 'PAYMENT_FAILED', `Razorpay webhook: ${event.event}`, { order_id: order.id, razorpay_order_id: razorpayOrderId, payment_id: order.razorpay_payment_id, amount: order.amount, provider: 'razorpay', event: event.event });
+      .select('id,amount,status,razorpay_payment_id').maybeSingle();
+    const sessionId = await sessionForRazorpayOrder(razorpayOrderId);
+    if (order && sessionId) await audit(sessionId, status === 'paid' ? 'PAYMENT_SUCCESS' : 'PAYMENT_FAILED', `Razorpay webhook: ${event.event}`, { order_id: order.id, razorpay_order_id: razorpayOrderId, payment_id: order.razorpay_payment_id, amount: order.amount, provider: 'razorpay', event: event.event });
     return NextResponse.json({ received: true });
   } catch {
     return NextResponse.json({ error: 'Invalid webhook payload.' }, { status: 400 });

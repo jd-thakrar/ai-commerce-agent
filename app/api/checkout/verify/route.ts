@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { audit, razorpaySignature, safeEqual } from '@/lib/commerce';
+import { audit, razorpaySignature, safeEqual, sessionForRazorpayOrder } from '@/lib/commerce';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
@@ -16,10 +16,11 @@ export async function POST(request: NextRequest) {
     const { data: order, error } = await supabaseAdmin.from('orders').update({
       razorpay_payment_id: paymentId,
       status: 'paid',
-    }).eq('razorpay_order_id', orderId).neq('status', 'paid').select('id,session_id,razorpay_order_id,razorpay_payment_id,amount,currency,status').maybeSingle();
+    }).eq('razorpay_order_id', orderId).neq('status', 'paid').select('id,razorpay_order_id,razorpay_payment_id,amount,currency,status').maybeSingle();
 
     if (error || !order) return NextResponse.json({ error: 'Order not found or already processed.' }, { status: 404 });
-    await audit(order.session_id, 'PAYMENT_SUCCESS', 'Razorpay payment verified', { order_id: order.id, razorpay_order_id: orderId, payment_id: paymentId, amount: order.amount, provider: 'razorpay' });
+    const sessionId = await sessionForRazorpayOrder(orderId);
+    if (sessionId) await audit(sessionId, 'PAYMENT_SUCCESS', 'Razorpay payment verified', { order_id: order.id, razorpay_order_id: orderId, payment_id: paymentId, amount: order.amount, provider: 'razorpay' });
     return NextResponse.json({ success: true, order });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Payment verification failed.' }, { status: 400 });

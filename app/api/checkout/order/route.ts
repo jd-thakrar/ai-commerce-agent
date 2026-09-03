@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
     });
 
     const { data: order, error } = await supabaseAdmin.from('orders').insert({
-      session_id: sessionId,
       razorpay_order_id: razorpayOrder.id,
       amount: cart.total,
       currency: cart.currency,

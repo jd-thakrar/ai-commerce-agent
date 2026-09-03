@@ -25,6 +25,17 @@ export async function activeCart(sessionId: string) {
   return cart;
 }
 
+export async function sessionForRazorpayOrder(orderId: string) {
+  const { data } = await supabaseAdmin
+    .from('audit_logs')
+    .select('session_id')
+    .eq('action', 'RAZORPAY_ORDER_CREATED')
+    .contains('metadata', { razorpay_order_id: orderId })
+    .maybeSingle();
+
+  return data?.session_id || '';
+}
+
 export function razorpaySignature(orderId: string, paymentId: string) {
   return crypto
     .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
