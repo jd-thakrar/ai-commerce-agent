@@ -1,4 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TechNova AI Commerce
+
+An AI-native commerce prototype for Razorpay Track 01. The live flow is:
+AI intent -> verified Supabase catalog -> cart -> explicit authorization -> Razorpay Test Mode -> server verification -> merchant audit trail.
+
+## Run locally
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000/shop`.
+
+Required server environment variables:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+GROQ_API_KEY=...
+GEMINI_API_KEY=...
+RAZORPAY_KEY_ID=...
+RAZORPAY_KEY_SECRET=...
+NEXT_PUBLIC_RAZORPAY_KEY_ID=...
+RAZORPAY_WEBHOOK_SECRET=...
+```
+
+Never commit `.env.local` or expose server keys through `NEXT_PUBLIC_` variables. Configure the Razorpay webhook URL as `https://<deployment>/api/webhooks/razorpay` and subscribe to `payment.captured`, `payment.failed`, and `order.paid`.
+
+## Demo routes
+
+- `/shop` customer AI buyer experience
+- `/checkout` explicit payment authorization and Razorpay Checkout
+- `/merchant` live merchant metrics and AI activity
+- `/api/ai/catalog` machine-readable active catalog
+
+## Deploy and configure Razorpay
+
+1. Open [vercel.com/new](https://vercel.com/new), import `jd-thakrar/ai-commerce-agent`, and deploy it.
+2. In Vercel, open **Project Settings -> Environment Variables** and add every variable from the block above for **Production** and **Preview**.
+3. Redeploy after saving the variables. Your public submission URL will look like `https://ai-commerce-agent-....vercel.app`.
+4. In the Razorpay Dashboard, switch to **Test Mode**, open **Account & Settings -> API Keys**, and generate a key pair. Put the Key ID in both `RAZORPAY_KEY_ID` and `NEXT_PUBLIC_RAZORPAY_KEY_ID`; put the Secret only in `RAZORPAY_KEY_SECRET`.
+5. In Razorpay, open **Account & Settings -> Webhooks -> Add New Webhook**. Set the webhook URL to `https://<your-vercel-domain>/api/webhooks/razorpay`, create a random signing secret, and copy that same value to `RAZORPAY_WEBHOOK_SECRET` in Vercel.
+6. Subscribe to `payment.captured`, `payment.failed`, and `order.paid`, then redeploy once more if the webhook secret was added afterward.
+
+The webhook secret is not the Razorpay API Secret. It is created separately when you add the webhook. Razorpay cannot call `localhost`; for local webhook testing use a tunnel such as `ngrok http 3000` and set the generated HTTPS URL as the webhook endpoint temporarily.
+
+Validate the deployed `/shop`, `/checkout`, `/merchant`, and `/api/ai/catalog` routes before submitting.
+
+## Validation
+
+```bash
+npx tsc --noEmit
+npm run lint
+npm run build
+```
 
 ## Getting Started
 
