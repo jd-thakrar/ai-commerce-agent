@@ -556,6 +556,47 @@ export async function addToCart(args: ToolArgs) {
    GET CART
 ========================================================= */
 
+async function getActiveCampaign() {
+  const { data, error } = await supabaseAdmin
+    .from("campaigns")
+    .select("name,discount_percent,active_category")
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Campaign lookup error:", error);
+    return null;
+  }
+
+  return data;
+}
+
+export function calculateCart(
+  cartItems: Array<{ quantity: number; price_at_addition: number; product?: { category?: string } | Array<{ category?: string }> | null }>,
+  campaign: { discount_percent: number; active_category: string } | null
+) {
+  const subtotal = cartItems.reduce(
+    (sum, item) => sum + Number(item.price_at_addition) * Number(item.quantity),
+    0
+  );
+  const campaignCategory = campaign?.active_category.trim().toLowerCase();
+  const discountPercent = campaign?.discount_percent ?? 0;
+  const discountedSubtotal = cartItems.reduce((sum, item) => {
+    const lineTotal = Number(item.price_at_addition) * Number(item.quantity);
+    const product = Array.isArray(item.product) ? item.product[0] : item.product;
+    const matches = campaignCategory && product?.category?.toLowerCase() === campaignCategory;
+    return sum + (matches ? lineTotal * (1 - discountPercent / 100) : lineTotal);
+  }, 0);
+
+  return {
+    subtotal,
+    discount: Math.max(0, subtotal - discountedSubtotal),
+    total: discountedSubtotal,
+    campaign: campaign || undefined,
+  };
+}
+
 export async function getCart(args: ToolArgs) {
   const sessionId = String(args.session_id || "").trim();
 
@@ -626,14 +667,8 @@ export async function getCart(args: ToolArgs) {
   }
 
   const cartItems = items || [];
-
-  const total = cartItems.reduce(
-    (sum, item: any) =>
-      sum +
-      Number(item.price_at_addition) *
-        Number(item.quantity),
-    0
-  );
+  const campaign = await getActiveCampaign();
+  const totals = calculateCart(cartItems, campaign);
 
   const itemCount = cartItems.reduce(
     (sum, item: any) =>
@@ -652,11 +687,14 @@ export async function getCart(args: ToolArgs) {
 
     items: cartItems,
 
-    total,
+    subtotal: totals.subtotal,
+    discount: totals.discount,
+    total: totals.total,
 
     currency: "INR",
 
     item_count: itemCount,
+    campaign: totals.campaign,
   };
 }
 

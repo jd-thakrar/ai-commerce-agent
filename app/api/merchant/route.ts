@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export async function GET() {
-  const [orders, audit, carts, products] = await Promise.all([
+  const [orders, audit, carts, products, campaigns] = await Promise.all([
     supabaseAdmin.from('orders').select('id,amount,status,created_at,razorpay_payment_id').order('created_at', { ascending: false }).limit(50),
     supabaseAdmin.from('audit_logs').select('id,action,description,metadata,created_at,session_id').order('created_at', { ascending: false }).limit(50),
     supabaseAdmin.from('carts').select('id,session_id,status').limit(1000),
     supabaseAdmin.from('products').select('id').eq('active', true),
+    supabaseAdmin.from('campaigns').select('id,name,discount_percent,active_category,status,created_at').order('created_at', { ascending: false }),
   ]);
-  if (orders.error || audit.error || carts.error || products.error) return NextResponse.json({ error: 'Merchant data unavailable.' }, { status: 500 });
+  if (orders.error || audit.error || carts.error || products.error || campaigns.error) return NextResponse.json({ error: 'Merchant data unavailable.' }, { status: 500 });
   const orderRows = orders.data || [];
   const paid = orderRows.filter((order) => order.status === 'paid');
   const sessions = new Set((audit.data || []).map((entry) => entry.session_id).filter(Boolean));
@@ -17,5 +18,13 @@ export async function GET() {
   const conversionRate = cartsCreated
     ? Math.min(100, Math.round((paid.length / cartsCreated) * 100))
     : 0;
-  return NextResponse.json({ metrics: { ai_assisted_sessions: sessions.size, products_discovered: products.data?.length || 0, ai_recommendations: recommendations, carts_created: cartsCreated, orders: orderRows.length, revenue: paid.reduce((sum, order) => sum + Number(order.amount || 0), 0), conversion_rate: conversionRate }, orders: orderRows.slice(0, 10), activity: audit.data || [] });
+  const activeCampaign = (campaigns.data || []).find((campaign) => campaign.status === 'active');
+  const activation = (audit.data || []).find((entry) =>
+    entry.action === 'CAMPAIGN_ACTIVATED' &&
+    (!activeCampaign || (entry.metadata as { campaign_id?: string } | null)?.campaign_id === activeCampaign.id)
+  );
+  const campaignInfluencedOrders = activeCampaign && activation
+    ? orderRows.filter((order) => new Date(order.created_at).getTime() >= new Date(activation.created_at).getTime()).length
+    : 0;
+  return NextResponse.json({ metrics: { ai_assisted_sessions: sessions.size, products_discovered: products.data?.length || 0, ai_recommendations: recommendations, carts_created: cartsCreated, orders: orderRows.length, revenue: paid.reduce((sum, order) => sum + Number(order.amount || 0), 0), conversion_rate: conversionRate, campaign_influenced_orders: campaignInfluencedOrders }, campaigns: campaigns.data || [], active_campaign: activeCampaign || null, orders: orderRows.slice(0, 10), activity: audit.data || [] });
 }

@@ -90,6 +90,23 @@ IMPORTANT RULES:
 - Prices must be shown in INR using ₹.
 `;
 
+type ActiveCampaign = {
+  name: string;
+  discount_percent: number;
+  active_category: string;
+};
+
+function buildSystemPrompt(campaign: ActiveCampaign | null) {
+  if (!campaign) return SYSTEM_PROMPT;
+
+  return `${SYSTEM_PROMPT}
+
+CURRENT MERCHANT CAMPAIGN:
+- ${campaign.name}: ${campaign.discount_percent}% off ${campaign.active_category} products.
+- Mention this discount when recommending products that match the campaign category.
+- When discussing the cart, use the getCart result as the source of truth for campaign-adjusted totals. Do not calculate or invent totals in the response.`;
+}
+
 /* =========================================================
    TYPES
 ========================================================= */
@@ -157,7 +174,8 @@ async function logAudit(
 async function runGroqAgent(
   message: string,
   history: HistoryMessage[],
-  sessionId: string
+  sessionId: string,
+  systemPrompt: string
 ): Promise<{
   reply: string;
   toolRounds: number;
@@ -178,7 +196,7 @@ async function runGroqAgent(
   const messages: any[] = [
     {
       role: "system",
-      content: SYSTEM_PROMPT,
+      content: systemPrompt,
     },
 
     ...history,
@@ -381,7 +399,8 @@ async function runGroqAgent(
 async function runGeminiAgent(
   message: string,
   history: HistoryMessage[],
-  sessionId: string
+  sessionId: string,
+  systemPrompt: string
 ): Promise<{
   reply: string;
   toolRounds: number;
@@ -424,7 +443,7 @@ async function runGeminiAgent(
   ];
 
   const config = {
-    systemInstruction: SYSTEM_PROMPT,
+    systemInstruction: systemPrompt,
 
     tools: [
       {
@@ -627,6 +646,14 @@ export async function POST(
       body.history
     );
 
+    const { data: activeCampaign } = await supabaseAdmin
+      .from("campaigns")
+      .select("name,discount_percent,active_category")
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+    const systemPrompt = buildSystemPrompt(activeCampaign as ActiveCampaign | null);
+
     let result: {
       reply: string;
       toolRounds: number;
@@ -643,7 +670,8 @@ export async function POST(
       result = await runGroqAgent(
         message,
         history,
-        sessionId
+        sessionId,
+        systemPrompt
       );
 
       console.log("[AI] Groq succeeded.");
@@ -686,7 +714,8 @@ export async function POST(
         result = await runGeminiAgent(
           message,
           history,
-          sessionId
+          sessionId,
+          systemPrompt
         );
 
         console.log(
