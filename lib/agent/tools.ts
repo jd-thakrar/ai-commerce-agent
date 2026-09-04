@@ -47,6 +47,41 @@ function productSearchText(product: Product): string {
     .toLowerCase();
 }
 
+type ActiveCampaign = {
+  name: string;
+  discount_percent: number;
+  active_category: string;
+};
+
+async function getActiveCampaign(): Promise<ActiveCampaign | null> {
+  const { data, error } = await supabaseAdmin
+    .from("campaigns")
+    .select("name,discount_percent,active_category")
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Campaign lookup error:", error);
+    return null;
+  }
+
+  return data;
+}
+
+function withCampaignPrice<T extends { price: number; category: string }>(
+  product: T,
+  campaign: ActiveCampaign | null
+) {
+  const matches = campaign && normalize(product.category) === normalize(campaign.active_category);
+  return {
+    ...product,
+    ...(matches
+      ? { discounted_price: Math.round(product.price * (1 - campaign.discount_percent / 100)) }
+      : {}),
+  };
+}
+
 /* =========================================================
    SEARCH PRODUCTS
 ========================================================= */
@@ -99,12 +134,14 @@ export async function searchProducts(args: ToolArgs) {
   }
 
   const products = (data || []) as Product[];
+  const campaign = await getActiveCampaign();
+  const pricedProducts = products.map((product) => withCampaignPrice(product, campaign));
 
   if (!queryText) {
     return {
       success: true,
-      count: products.length,
-      products: products.slice(0, 6),
+      count: pricedProducts.length,
+      products: pricedProducts.slice(0, 6),
     };
   }
 
@@ -112,7 +149,7 @@ export async function searchProducts(args: ToolArgs) {
     .split(/\s+/)
     .filter((word: string) => word.length > 1);
 
-  const ranked = products
+  const ranked = pricedProducts
     .map((product) => {
       const text = productSearchText(product);
 
@@ -197,7 +234,7 @@ export async function getProduct(args: ToolArgs) {
 
   return {
     success: true,
-    product: data as Product,
+    product: withCampaignPrice(data as Product, await getActiveCampaign()),
   };
 }
 
@@ -556,22 +593,6 @@ export async function addToCart(args: ToolArgs) {
    GET CART
 ========================================================= */
 
-async function getActiveCampaign() {
-  const { data, error } = await supabaseAdmin
-    .from("campaigns")
-    .select("name,discount_percent,active_category")
-    .eq("status", "active")
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Campaign lookup error:", error);
-    return null;
-  }
-
-  return data;
-}
-
 export function calculateCart(
   cartItems: Array<{ quantity: number; price_at_addition: number; product?: { category?: string } | Array<{ category?: string }> | null }>,
   campaign: { discount_percent: number; active_category: string } | null
@@ -582,17 +603,27 @@ export function calculateCart(
   );
   const campaignCategory = campaign?.active_category.trim().toLowerCase();
   const discountPercent = campaign?.discount_percent ?? 0;
-  const discountedSubtotal = cartItems.reduce((sum, item) => {
-    const lineTotal = Number(item.price_at_addition) * Number(item.quantity);
+  const discountedItems = cartItems.map((item) => {
     const product = Array.isArray(item.product) ? item.product[0] : item.product;
     const matches = campaignCategory && product?.category?.toLowerCase() === campaignCategory;
-    return sum + (matches ? lineTotal * (1 - discountPercent / 100) : lineTotal);
-  }, 0);
+    const unitPrice = matches
+      ? Math.round(Number(item.price_at_addition) * (1 - discountPercent / 100))
+      : Number(item.price_at_addition);
+    return {
+      ...item,
+      price_at_addition: unitPrice,
+      original_price_at_addition: Number(item.price_at_addition),
+      discounted_price: matches ? unitPrice : undefined,
+      line_total: unitPrice * Number(item.quantity),
+    };
+  });
+  const discountedSubtotal = discountedItems.reduce((sum, item) => sum + item.line_total, 0);
 
   return {
     subtotal,
     discount: Math.max(0, subtotal - discountedSubtotal),
     total: discountedSubtotal,
+    items: discountedItems,
     campaign: campaign || undefined,
   };
 }
@@ -685,7 +716,7 @@ export async function getCart(args: ToolArgs) {
       status: cart.status,
     },
 
-    items: cartItems,
+    items: totals.items,
 
     subtotal: totals.subtotal,
     discount: totals.discount,
