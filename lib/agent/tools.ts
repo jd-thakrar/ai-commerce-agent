@@ -201,6 +201,67 @@ export async function getProduct(args: ToolArgs) {
   };
 }
 
+function normalizeAttributeKey(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/[\s-]+/g, "_")
+    .toLowerCase();
+}
+
+export async function compareProducts(args: ToolArgs) {
+  const productIds = Array.isArray(args.product_ids)
+    ? args.product_ids.map((id: unknown) => String(id).trim()).filter(Boolean)
+    : [];
+
+  if (productIds.length < 2 || productIds.length > 4) {
+    return { success: false, error: "product_ids must contain between 2 and 4 products" };
+  }
+
+  const uniqueProductIds = [...new Set(productIds)];
+  if (uniqueProductIds.length !== productIds.length) {
+    return { success: false, error: "product_ids must contain unique products" };
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("products")
+    .select("id,name,price,attributes,active")
+    .in("id", uniqueProductIds)
+    .eq("active", true);
+
+  if (error) {
+    console.error("compareProducts error:", error);
+    return { success: false, error: "Unable to compare products" };
+  }
+
+  const productsById = new Map((data || []).map((product) => [product.id, product]));
+  if (uniqueProductIds.some((id) => !productsById.has(id))) {
+    return { success: false, error: "One or more products were not found" };
+  }
+
+  const rawProducts = uniqueProductIds.map((id) => productsById.get(id)!);
+  const attributeKeys = [...new Set(rawProducts.flatMap((product) =>
+    Object.keys(product.attributes || {}).map(normalizeAttributeKey)
+  ))].sort();
+
+  const products = rawProducts.map((product) => {
+    const attributes = Object.fromEntries(attributeKeys.map((key) => {
+      const source = Object.entries(product.attributes || {}).find(
+        ([sourceKey]) => normalizeAttributeKey(sourceKey) === key
+      );
+      return [key, source?.[1] ?? null];
+    }));
+
+    return { id: product.id, name: product.name, price: product.price, attributes };
+  });
+
+  const differences = attributeKeys.filter((key) => {
+    const values = products.map((product) => product.attributes[key]);
+    return new Set(values.map((value) => JSON.stringify(value))).size > 1;
+  });
+
+  return { success: true, products, differences };
+}
+
 /* =========================================================
    SUGGEST UPSELLS
 ========================================================= */
@@ -649,6 +710,23 @@ export const toolDeclarations = [
   },
 
   {
+    name: "compareProducts",
+    description:
+      "Use this whenever the user asks to compare two or more products, or when recommending between multiple similar options.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        product_ids: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "An array of 2 to 4 product UUIDs to compare.",
+        },
+      },
+      required: ["product_ids"],
+    },
+  },
+
+  {
     name: "suggestUpsells",
     description:
       "Find relevant accessories or services that complement a selected product.",
@@ -772,6 +850,26 @@ export const groqToolDeclarations = [
   {
     type: "function" as const,
     function: {
+      name: "compareProducts",
+      description:
+        "Use this whenever the user asks to compare two or more products, or when recommending between multiple similar options.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "An array of 2 to 4 product UUIDs to compare.",
+          },
+        },
+        required: ["product_ids"],
+      },
+    },
+  },
+
+  {
+    type: "function" as const,
+    function: {
       name: "suggestUpsells",
       description:
         "Find relevant accessories or services that complement a selected product.",
@@ -854,6 +952,7 @@ export const toolImplementations: Record<
 > = {
   searchProducts,
   getProduct,
+  compareProducts,
   suggestUpsells,
   addToCart,
   getCart,
