@@ -21,6 +21,35 @@ export async function POST(request: NextRequest) {
 
     const cart = await activeCart(sessionId);
     const amount = Math.round((cart.total ?? 0) * 100);
+
+    const { data: checkoutAudits } = await supabaseAdmin
+      .from('audit_logs')
+      .select('metadata')
+      .eq('session_id', sessionId)
+      .eq('action', 'CHECKOUT_STARTED')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const previousOrderIds = (checkoutAudits || [])
+      .map((entry) => {
+        const metadata = entry.metadata as { order_id?: string; amount?: number } | null;
+        return metadata?.amount === cart.total ? metadata.order_id : undefined;
+      })
+      .filter((orderId): orderId is string => Boolean(orderId));
+
+    let existingOrderId: string | undefined;
+    if (previousOrderIds.length) {
+      const { data: existingOrder } = await supabaseAdmin
+        .from('orders')
+        .select('id')
+        .in('id', previousOrderIds)
+        .neq('status', 'paid')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      existingOrderId = existingOrder?.id;
+    }
+
     const razorpayOrder = await razorpayRequest<RazorpayOrder>('/orders', {
       amount,
       currency: cart.currency,
@@ -28,12 +57,23 @@ export async function POST(request: NextRequest) {
       notes: { session_id: sessionId },
     });
 
-    const { data: order, error } = await supabaseAdmin.from('orders').insert({
-      razorpay_order_id: razorpayOrder.id,
-      amount: cart.total,
-      currency: cart.currency,
-      status: 'created',
-    }).select('id,razorpay_order_id,amount,currency,status').single();
+    const orderQuery = existingOrderId
+      ? supabaseAdmin.from('orders').update({
+          razorpay_order_id: razorpayOrder.id,
+          amount: cart.total,
+          currency: cart.currency,
+          status: 'created',
+        }).eq('id', existingOrderId)
+      : supabaseAdmin.from('orders').insert({
+          razorpay_order_id: razorpayOrder.id,
+          amount: cart.total,
+          currency: cart.currency,
+          status: 'created',
+        });
+
+    const { data: order, error } = await orderQuery
+      .select('id,razorpay_order_id,amount,currency,status')
+      .single();
 
     if (error || !order) throw new Error('Unable to save checkout order.');
     await audit(sessionId, 'CHECKOUT_STARTED', 'Customer authorized checkout', { order_id: order.id, amount: cart.total });
