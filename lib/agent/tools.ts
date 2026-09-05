@@ -32,6 +32,10 @@ export type ToolArgs = ToolContext & Record<string, any>;
 function normalize(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
+function extractProcessorTier(processor: unknown): number {
+  const match = String(processor ?? "").match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+}
 
 function productSearchText(product: Product): string {
   return [
@@ -97,6 +101,10 @@ export async function searchProducts(args: ToolArgs) {
     ? normalize(args.processor)
     : "";
 
+  const processorMinTier = args.processor_min
+    ? extractProcessorTier(args.processor_min)
+    : 0;
+
   const maxPrice =
     args.max_price !== undefined
       ? Number(args.max_price)
@@ -144,6 +152,11 @@ export async function searchProducts(args: ToolArgs) {
   if (processor) {
     pricedProducts = pricedProducts.filter((product) =>
       normalize((product.attributes as any)?.processor).includes(processor)
+    );
+  }
+    if (processorMinTier > 0) {
+    pricedProducts = pricedProducts.filter((product) =>
+      extractProcessorTier((product.attributes as any)?.processor) >= processorMinTier
     );
   }
 
@@ -771,6 +784,11 @@ export const toolDeclarations = [
           description:
             "Optional exact processor filter, e.g. 'i5', 'i3', 'Ryzen 5'. Use this whenever the customer specifies a chip requirement — do not rely on the free-text query for this.",
         },
+                processor_min: {
+          type: Type.STRING,
+          description:
+            "Use this instead of 'processor' when the customer asks for a MINIMUM tier — e.g. 'i5 or better', 'at least Ryzen 5', 'minimum i5'. Pass the tier they named (e.g. 'i5'); this returns that tier AND anything stronger (i7, i9, Ryzen 7, etc).",
+        },
       },
       required: ["query"],
     },
@@ -911,6 +929,11 @@ export const groqToolDeclarations = [
             description:
               "Optional exact processor filter, e.g. 'i5', 'i3', 'Ryzen 5'. Use this whenever the customer specifies a chip requirement — do not rely on the free-text query for this.",
           },
+                  processor_min: {
+          type: Type.STRING,
+          description:
+            "Use this instead of 'processor' when the customer asks for a MINIMUM tier — e.g. 'i5 or better', 'at least Ryzen 5', 'minimum i5'. Pass the tier they named (e.g. 'i5'); this returns that tier AND anything stronger (i7, i9, Ryzen 7, etc).",
+        },
         },
         required: ["query"],
       },
