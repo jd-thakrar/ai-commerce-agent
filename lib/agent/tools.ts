@@ -624,6 +624,38 @@ export async function addToCart(args: ToolArgs) {
   });
 }
 
+export async function removeCartItem(args: ToolArgs) {
+  const sessionId = String(args.session_id || "").trim();
+  const itemId = String(args.item_id || "").trim();
+
+  if (!sessionId || !itemId) {
+    return { success: false, error: "session_id and item_id are required" };
+  }
+
+  const { data: cart } = await supabaseAdmin
+    .from("carts")
+    .select("id")
+    .eq("session_id", sessionId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (!cart) {
+    return { success: false, error: "No active cart found" };
+  }
+
+  const { error } = await supabaseAdmin
+    .from("cart_items")
+    .delete()
+    .eq("id", itemId)
+    .eq("cart_id", cart.id);
+
+  if (error) {
+    console.error("removeCartItem error:", error);
+    return { success: false, error: "Unable to remove item" };
+  }
+
+  return getCart({ session_id: sessionId });
+}
 /* =========================================================
    GET CART
 ========================================================= */

@@ -47,6 +47,18 @@ export default function CheckoutPage() {
       })
       .catch(() => setMessage('We could not load your cart.'));
   }, []);
+  async function removeItem(itemId: string) {
+    if (!sessionId) return;
+    await fetch('/api/cart/items', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, item_id: itemId }),
+    }).catch(() => undefined);
+    const response = await fetch(`/api/cart?session_id=${encodeURIComponent(sessionId)}`);
+    const data = await response.json();
+    setCart(data.items?.length ? data : null);
+    setMessage(data.items?.length ? 'Ready for your authorization.' : 'Your cart is empty.');
+  }
 
   async function authorizePurchase() {
     if (!sessionId || !cart || authorizing) return;
@@ -167,6 +179,7 @@ export default function CheckoutPage() {
                         <th>Product</th>
                         <th className="align-right">Qty</th>
                         <th className="align-right">Line total</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -178,6 +191,14 @@ export default function CheckoutPage() {
                           </td>
                           <td className="align-right font-mono-data text-accent">
                             {money(item.price_at_addition * item.quantity)}
+                          </td>
+                          <td className="align-right">
+                            <button
+                              onClick={() => removeItem(item.id)}
+                              className="text-xs text-danger hover:underline"
+                            >
+                              Remove
+                            </button>
                           </td>
                         </tr>
                       ))}
