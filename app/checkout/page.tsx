@@ -92,6 +92,9 @@ export default function CheckoutPage() {
           const result = await verify.json();
           if (verify.ok) {
             setMessage(`Payment complete. Order ${result.order.id}`);
+             setTimeout(() => {
+              window.location.href = '/shop';
+            }, 1800);
           } else {
             await reportFailure(data.order.razorpay_order_id, result.error || 'Payment verification failed.');
           }
