@@ -1027,14 +1027,9 @@ export const groqToolDeclarations = [
       name: "addToCart",
       description:
         "Add a product to the customer's cart. Only use this after explicit customer approval.",
-      parameters: {
+            parameters: {
         type: "object",
         properties: {
-          session_id: {
-            type: "string",
-            description:
-              "The customer's shopping session ID.",
-          },
           product_id: {
             type: "string",
             description:
@@ -1043,14 +1038,10 @@ export const groqToolDeclarations = [
           quantity: {
             type: "number",
             description:
-              "Quantity between 1 and 10.",
+              "Quantity, defaults to 1 if not specified.",
           },
         },
-        required: [
-          "session_id",
-          "product_id",
-          "quantity",
-        ],
+        required: ["product_id"],
       },
     },
   },
