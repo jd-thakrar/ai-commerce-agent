@@ -2,10 +2,52 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { AnimatedNumber } from '../components/AnimatedNumber';
 
 const money = (value: number) => `₹${value.toLocaleString('en-IN')}`;
-type Campaign = { id: string; name: string; discount_percent: number; active_category: string; status: string };
-type Dashboard = { metrics: Record<string, number>; campaigns: Campaign[]; active_campaign: Campaign | null; activity: Array<{ id: string; action: string; description: string; created_at: string }>; orders: Array<{ id: string; amount: number; status: string; created_at: string }> };
+type Campaign = {
+  id: string;
+  name: string;
+  discount_percent: number;
+  active_category: string;
+  status: string;
+};
+type Dashboard = {
+  metrics: Record<string, number>;
+  campaigns: Campaign[];
+  active_campaign: Campaign | null;
+  activity: Array<{ id: string; action: string; description: string; created_at: string }>;
+  orders: Array<{ id: string; amount: number; status: string; created_at: string }>;
+};
+
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
+function shortId(value: string) {
+  return value.slice(0, 8).toUpperCase();
+}
+
+function StatusLabel({ status }: { status: string }) {
+  const isPaid = status === 'paid';
+  const isFailed = status === 'failed' || status === 'declined';
+  const dotClass = isPaid ? 'status-dot-success' : isFailed ? 'status-dot-danger' : 'status-dot-neutral';
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-text-secondary">
+      <span className={`status-dot ${dotClass}`} />
+      {status}
+    </span>
+  );
+}
 
 export default function MerchantPage() {
   const [data, setData] = useState<Dashboard | null>(null);
@@ -49,7 +91,12 @@ export default function MerchantPage() {
   }
 
   async function createCampaign() {
-    if (!formData.name || formData.discount_percent < 0 || formData.discount_percent > 100 || !formData.active_category) {
+    if (
+      !formData.name ||
+      formData.discount_percent < 0 ||
+      formData.discount_percent > 100 ||
+      !formData.active_category
+    ) {
       setError('All fields are required and discount must be 0-100.');
       return;
     }
@@ -75,173 +122,273 @@ export default function MerchantPage() {
   const campaigns = data?.campaigns || [];
 
   return (
-    <main className="min-h-screen bg-[#f7f7f8] px-5 py-8 text-[#111] md:px-10">
+    <main className="min-h-screen bg-bg px-4 py-6 text-text-primary md:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="flex items-center justify-between border-b border-black/10 pb-6">
+        <header className="flex items-center justify-between border-b border-border pb-4">
           <div>
-            <p className="text-xs font-medium tracking-widest text-black/40">MERCHANT CONSOLE</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">AI commerce control center</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+              Merchant console
+            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight">Operations dashboard</h1>
           </div>
-          <Link href="/shop" className="rounded-full bg-black px-4 py-2 text-sm text-white">Open storefront</Link>
+          <Link
+            href="/shop"
+            className="interactive-border primary-button px-4 py-2 text-xs font-semibold"
+          >
+            Open storefront
+          </Link>
         </header>
 
-        {error && <p className="mt-8 text-sm text-red-700">{error}</p>}
+        {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
-        {/* Campaigns Section */}
-        <section className="mt-8 border border-black/10 bg-white">
-          <div className="border-b border-black/10 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium tracking-widest text-black/40">CAMPAIGNS</p>
-                <h2 className="mt-2 text-lg font-semibold">Manage campaigns</h2>
-              </div>
-              <button
-                onClick={() => setShowCreateForm(!showCreateForm)}
-                disabled={working === 'create'}
-                className="rounded-full bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
-              >
-                {working === 'create' ? 'Creating...' : '+ New campaign'}
-              </button>
+        {metrics && (
+          <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              {[
+                ['Sessions', metrics.ai_assisted_sessions],
+                ['Discovered', metrics.products_discovered],
+                ['Carts', metrics.carts_created],
+                ['Orders', metrics.orders],
+                ['Revenue', metrics.revenue],
+                ['Conversion', metrics.conversion_rate],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="panel px-5 py-5">
+                  <p className="text-[10px] uppercase tracking-[0.06em] text-text-secondary">
+                    {label}
+                  </p>
+                  <p className="mt-1 font-mono-data text-xl font-semibold text-accent">
+                    {label === 'Revenue' ? (
+                      <AnimatedNumber value={Number(value)} format={money} className="text-accent" />
+                    ) : label === 'Conversion' ? (
+                      <AnimatedNumber value={Number(value)} format={(v) => `${v}%`} />
+                    ) : (
+                      <AnimatedNumber value={Number(value)} />
+                    )}
+                  </p>
+                </div>
+              ))}
+          </section>
+        )}
+
+        <section className="panel mt-4">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+                Campaigns
+              </p>
+              <h2 className="text-sm font-semibold tracking-tight">Pricing controls</h2>
             </div>
+            <button
+              onClick={() => setShowCreateForm(!showCreateForm)}
+              disabled={working === 'create'}
+              className="interactive-border primary-button px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
+            >
+              {working === 'create' ? 'Creating...' : '+ New campaign'}
+            </button>
           </div>
 
           {showCreateForm && (
-            <div className="border-b border-black/10 p-5">
-              <div className="space-y-4">
+            <div className="border-b border-border px-4 py-4">
+              <div className="grid gap-3 md:grid-cols-3">
                 <div>
-                  <label className="block text-xs font-medium text-black/60">Campaign name</label>
+                  <label className="block text-[11px] text-text-secondary">Campaign name</label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Spring Sale"
-                    className="mt-1 w-full rounded border border-black/10 px-3 py-2 text-sm"
+                    placeholder="Spring Sale"
+                    className="input-control mt-1 w-full px-2 py-1.5 text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-black/60">Discount %</label>
+                  <label className="block text-[11px] text-text-secondary">Discount %</label>
                   <input
                     type="number"
                     min="0"
                     max="100"
                     value={formData.discount_percent}
-                    onChange={(e) => setFormData({ ...formData, discount_percent: Number(e.target.value) })}
-                    className="mt-1 w-full rounded border border-black/10 px-3 py-2 text-sm"
+                    onChange={(e) =>
+                      setFormData({ ...formData, discount_percent: Number(e.target.value) })
+                    }
+                    className="input-control mt-1 w-full px-2 py-1.5 text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-black/60">Apply to category</label>
+                  <label className="block text-[11px] text-text-secondary">Category</label>
                   <select
                     value={formData.active_category}
                     onChange={(e) => setFormData({ ...formData, active_category: e.target.value })}
-                    className="mt-1 w-full rounded border border-black/10 px-3 py-2 text-sm"
+                    className="input-control mt-1 w-full px-2 py-1.5 text-sm"
                   >
                     <option value="">Select category</option>
                     {categories.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
                     ))}
                   </select>
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={createCampaign}
-                    disabled={working === 'create'}
-                    className="flex-1 rounded-full bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
-                  >
-                    {working === 'create' ? 'Creating...' : 'Create campaign'}
-                  </button>
-                  <button
-                    onClick={() => setShowCreateForm(false)}
-                    className="flex-1 rounded-full border border-black/10 px-4 py-2 text-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={createCampaign}
+                  disabled={working === 'create'}
+                  className="interactive-border primary-button px-4 py-1.5 text-xs font-semibold disabled:opacity-40"
+                >
+                  {working === 'create' ? 'Creating...' : 'Create campaign'}
+                </button>
+                <button
+                  onClick={() => setShowCreateForm(false)}
+                  className="interactive-border border border-border bg-bg px-4 py-1.5 text-xs text-text-secondary"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
 
           {campaigns.length === 0 ? (
-            <div className="p-5 text-center text-sm text-black/45">No campaigns yet. Create one to get started.</div>
+            <p className="px-4 py-6 text-sm text-text-secondary">
+              No campaigns yet. Create one to get started.
+            </p>
           ) : (
-            <div className="divide-y divide-black/10">
-              {campaigns.map((campaign) => (
-                <div key={campaign.id} className="flex items-center justify-between p-5">
-                  <div className="flex-1">
-                    <p className="font-semibold">{campaign.name}</p>
-                    <p className="mt-1 text-sm text-black/50">
-                      {campaign.discount_percent}% off {campaign.active_category} · {campaign.status === 'active' ? '✓ Active' : 'Inactive'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => toggleCampaign(campaign)}
-                    disabled={working === campaign.id}
-                    className={`rounded-full px-4 py-2 text-sm ${
-                      campaign.status === 'active'
-                        ? 'bg-red-600 text-white'
-                        : 'bg-black text-white'
-                    } disabled:opacity-40`}
-                  >
-                    {working === campaign.id ? 'Updating...' : campaign.status === 'active' ? 'Deactivate' : 'Activate'}
-                  </button>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Discount</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th className="align-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {campaigns.map((campaign) => (
+                    <tr key={campaign.id}>
+                      <td className="font-semibold">{campaign.name}</td>
+                      <td className="font-mono-data text-accent">
+                        −{campaign.discount_percent}%
+                      </td>
+                      <td className="text-text-secondary">{campaign.active_category}</td>
+                      <td>
+                        <span className="inline-flex items-center gap-1.5 text-text-secondary">
+                          <span
+                            className={`status-dot ${
+                              campaign.status === 'active'
+                                ? 'status-dot-success'
+                                : 'status-dot-neutral'
+                            }`}
+                          />
+                          {campaign.status}
+                        </span>
+                      </td>
+                      <td className="align-right">
+                        <button
+                          onClick={() => toggleCampaign(campaign)}
+                          disabled={working === campaign.id}
+                          className={`interactive-border border px-3 py-1 text-[11px] font-semibold disabled:opacity-40 ${
+                            campaign.status === 'active'
+                              ? 'border-danger text-danger'
+                              : 'border-accent-gold bg-accent-gold text-bg'
+                          }`}
+                        >
+                          {working === campaign.id
+                            ? 'Updating...'
+                            : campaign.status === 'active'
+                              ? 'Deactivate'
+                              : 'Activate'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
 
-        {metrics && (
-          <>
-            <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-              {[
-                ['AI-assisted sessions', metrics.ai_assisted_sessions],
-                ['Products discovered', metrics.products_discovered],
-                ['Carts created', metrics.carts_created],
-                ['Orders', metrics.orders],
-                ['Revenue', money(metrics.revenue)],
-                ['Cart-to-order conversion', `${metrics.conversion_rate}%`],
-              ].map(([label, value]) => (
-                <div key={String(label)} className="border border-black/10 bg-white p-5">
-                  <p className="text-xs text-black/45">{label}</p>
-                  <p className="mt-3 text-2xl font-semibold">{value}</p>
-                </div>
-              ))}
-            </div>
+        <section className="panel mt-4">
+          <div className="border-b border-border px-4 py-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+              Orders
+            </p>
+            <h2 className="text-sm font-semibold tracking-tight">Recent transactions</h2>
+          </div>
+          <div className="max-h-[420px] overflow-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th className="align-right">Amount</th>
+                  <th>Status</th>
+                  <th className="align-right">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.orders.length ? (
+                  data.orders.map((order) => (
+                    <tr key={order.id}>
+                      <td className="font-mono-data text-xs">{shortId(order.id)}</td>
+                      <td className="align-right font-mono-data text-accent">
+                        {money(Number(order.amount))}
+                      </td>
+                      <td>
+                        <StatusLabel status={order.status} />
+                      </td>
+                      <td className="align-right font-mono-data text-xs text-text-secondary">
+                        {formatTimestamp(order.created_at)}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-center text-text-secondary">
+                      No orders yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-            <div className="mt-8 grid gap-8 md:grid-cols-[1fr_1.2fr]">
-              <section>
-                <h2 className="text-lg font-semibold">Recent orders</h2>
-                <div className="mt-3 divide-y divide-black/10 border-y border-black/10">
-                  {data?.orders.length ? (
-                    data.orders.map((order) => (
-                      <div key={order.id} className="flex justify-between py-4 text-sm">
-                        <span>{order.status}</span>
-                        <span>{money(Number(order.amount))}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="py-5 text-sm text-black/45">No orders yet.</p>
-                  )}
-                </div>
-              </section>
-
-              <section>
-                <h2 className="text-lg font-semibold">Recent AI activity</h2>
-                <div className="mt-3 divide-y divide-black/10 border-y border-black/10">
-                  {data?.activity.slice(0, 12).map((entry) => (
-                    <div key={entry.id} className="flex gap-3 py-4 text-sm">
-                      <span className="text-green-600">✓</span>
-                      <div>
-                        <p>{entry.description}</p>
-                        <p className="mt-1 text-xs text-black/40">{new Date(entry.created_at).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </div>
-          </>
-        )}
+        <section className="panel mt-4">
+          <div className="border-b border-border px-4 py-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+              Activity log
+            </p>
+            <h2 className="text-sm font-semibold tracking-tight">AI audit trail</h2>
+          </div>
+          <div className="max-h-[420px] overflow-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th className="align-right">Time</th>
+                  <th>Action</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.activity.map((entry) => (
+                  <tr key={entry.id}>
+                    <td className="align-right font-mono-data text-xs text-text-secondary">
+                      {formatTimestamp(entry.created_at)}
+                    </td>
+                    <td className="font-mono-data text-xs">{entry.action}</td>
+                    <td className="text-text-secondary">{entry.description}</td>
+                  </tr>
+                ))}
+                {!data?.activity.length && (
+                  <tr>
+                    <td colSpan={3} className="py-6 text-center text-text-secondary">
+                      No activity recorded yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </main>
   );

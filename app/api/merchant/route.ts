@@ -3,8 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 
 export async function GET() {
   const [orders, audit, carts, products, campaigns] = await Promise.all([
-    supabaseAdmin.from('orders').select('id,amount,status,created_at,razorpay_payment_id').order('created_at', { ascending: false }).limit(50),
-    supabaseAdmin.from('audit_logs').select('id,action,description,metadata,created_at,session_id').order('created_at', { ascending: false }).limit(50),
+    supabaseAdmin.from('orders').select('id,amount,status,created_at,razorpay_payment_id').order('created_at', { ascending: false }).limit(500),
+    supabaseAdmin.from('audit_logs').select('id,action,description,metadata,created_at,session_id').order('created_at', { ascending: false }).limit(500),
     supabaseAdmin.from('carts').select('id,session_id,status').limit(1000),
     supabaseAdmin.from('products').select('id').eq('active', true),
     supabaseAdmin.from('campaigns').select('id,name,discount_percent,active_category,status,created_at').order('created_at', { ascending: false }),
@@ -26,5 +26,5 @@ export async function GET() {
   const campaignInfluencedOrders = activeCampaign && activation
     ? orderRows.filter((order) => new Date(order.created_at).getTime() >= new Date(activation.created_at).getTime()).length
     : 0;
-  return NextResponse.json({ metrics: { ai_assisted_sessions: sessions.size, products_discovered: products.data?.length || 0, ai_recommendations: recommendations, carts_created: cartsCreated, orders: orderRows.length, revenue: paid.reduce((sum, order) => sum + Number(order.amount || 0), 0), conversion_rate: conversionRate, campaign_influenced_orders: campaignInfluencedOrders }, campaigns: campaigns.data || [], active_campaign: activeCampaign || null, orders: orderRows.slice(0, 10), activity: audit.data || [] });
+  return NextResponse.json({ metrics: { ai_assisted_sessions: sessions.size, products_discovered: products.data?.length || 0, ai_recommendations: recommendations, carts_created: cartsCreated, orders: orderRows.length, revenue: paid.reduce((sum, order) => sum + Number(order.amount || 0), 0), conversion_rate: conversionRate, campaign_influenced_orders: campaignInfluencedOrders }, campaigns: campaigns.data || [], active_campaign: activeCampaign || null, orders: orderRows, activity: audit.data || [] });
 }
