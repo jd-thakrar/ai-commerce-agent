@@ -40,7 +40,7 @@ function productSearchText(product: Product): string {
     product.category,
     ...(product.tags || []),
     ...(product.use_cases || []),
-    JSON.stringify(product.attributes || {}),
+    Object.values(product.attributes || {}).join(" "),
   ]
     .filter(Boolean)
     .join(" ")
@@ -93,6 +93,10 @@ export async function searchProducts(args: ToolArgs) {
     ? normalize(args.category)
     : "";
 
+  const processor = args.processor
+    ? normalize(args.processor)
+    : "";
+
   const maxPrice =
     args.max_price !== undefined
       ? Number(args.max_price)
@@ -133,9 +137,15 @@ export async function searchProducts(args: ToolArgs) {
     };
   }
 
-  const products = (data || []) as Product[];
+   const products = (data || []) as Product[];
   const campaign = await getActiveCampaign();
-  const pricedProducts = products.map((product) => withCampaignPrice(product, campaign));
+  let pricedProducts = products.map((product) => withCampaignPrice(product, campaign));
+
+  if (processor) {
+    pricedProducts = pricedProducts.filter((product) =>
+      normalize((product.attributes as any)?.processor).includes(processor)
+    );
+  }
 
   if (!queryText) {
     return {
@@ -751,15 +761,21 @@ export const toolDeclarations = [
           description:
             "Optional category such as Laptop, Accessory, or Service.",
         },
-        max_price: {
+              max_price: {
           type: Type.NUMBER,
           description:
             "Optional maximum price in INR.",
+        },
+        processor: {
+          type: Type.STRING,
+          description:
+            "Optional exact processor filter, e.g. 'i5', 'i3', 'Ryzen 5'. Use this whenever the customer specifies a chip requirement — do not rely on the free-text query for this.",
         },
       },
       required: ["query"],
     },
   },
+
 
   {
     name: "getProduct",
@@ -885,10 +901,15 @@ export const groqToolDeclarations = [
             description:
               "Optional category such as Laptop, Accessory, or Service.",
           },
-          max_price: {
+                  max_price: {
             type: "number",
             description:
               "Optional maximum price in INR.",
+          },
+          processor: {
+            type: "string",
+            description:
+              "Optional exact processor filter, e.g. 'i5', 'i3', 'Ryzen 5'. Use this whenever the customer specifies a chip requirement — do not rely on the free-text query for this.",
           },
         },
         required: ["query"],
