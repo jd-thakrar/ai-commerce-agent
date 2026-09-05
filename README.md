@@ -1,250 +1,347 @@
-# TechNova AI Commerce
+# TechNova — AI Commerce Agent
 
-An AI-native commerce prototype for Razorpay Track 01. The live flow is:
-AI intent -> verified Supabase catalog -> cart -> explicit authorization -> Razorpay Test Mode -> server verification -> merchant audit trail.
+**Razorpay AI Buildathon 2026 — Track 01: AI Growth & Agentic Commerce**
 
-## Run locally
+> Grow the merchant's revenue, and make them sellable to AI buyers.
 
-```bash
-npm install
-npm run dev
-## TechNova AI Commerce
+TechNova is a working, end-to-end prototype that turns a merchant catalog into
+something an AI agent — human-operated or fully autonomous — can discover,
+reason about, and transact against, with every money action **explainable,
+bounded, gated, and auditable.**
 
-TechNova is a working prototype for Razorpay Track 01: **AI Growth & Agentic Commerce**.
+---
 
-The product makes a merchant catalog understandable and transactable by an AI buyer:
+## 1. The problem, in one paragraph
 
-```text
+NPCI's UAP and the global race between agent-commerce protocols (Stripe/OpenAI's
+ACP, Google's AP2, Coinbase's x402) are all trying to answer the same question:
+**how does an AI agent safely buy something on a human's behalf, or transact
+with another agent entirely, without a human clicking "confirm" at every step?**
+Nobody has this fully solved yet. TechNova is a concrete answer to the *safety
+pattern* that any such system needs — demonstrated on real Razorpay test-mode
+payments, not a mockup.
+
+---
+
+## 2. What TechNova actually does
+
+```
 Buyer intent
-	-> AI catalog search
-	-> recommendation
-	-> contextual upsell
-	-> real Supabase cart
-	-> explicit purchase authorization
-	-> Razorpay Test Mode order
-	-> Checkout
-	-> server-side signature verification
-	-> order and audit trail
-	-> merchant control center
+  → AI catalog search (real Supabase inventory)
+  → recommendation with stated reasoning
+  → structured comparison (when asked)
+  → contextual upsell
+  → cart (server-owned, session-scoped)
+  → explicit purchase authorization
+  → Razorpay Test Mode order (server recalculates the total — never trusts the AI)
+  → Checkout
+  → server-side signature verification
+  → order + audit trail
+  → merchant control center
 ```
 
-The central product rule is: **AI may discover and recommend, but it cannot silently spend money.** The customer must explicitly authorize checkout, the server calculates the amount from the database cart, and payment is marked successful only after verification.
+**The one rule the whole system is built around:**
+**AI may discover, compare, and recommend — but it cannot silently spend money.**
+The customer (or an external agent) must explicitly authorize checkout, the
+server independently recalculates the amount from the database cart, and
+payment is only marked successful after Razorpay's signature is verified.
 
-## Track 01 Fit
+---
 
-This project demonstrates all four example directions from the brief:
+## 3. How this maps to the brief's four example directions
 
-- **Conversational in-app checkout:** the buyer describes a need in natural language and continues to a gated checkout.
-- **Agent-readable catalog:** `/api/ai/catalog` exposes active products as structured JSON.
-- **Upsell and cross-sell agent:** `suggestUpsells` finds real accessories and services from the Supabase catalog.
-- **Merchant growth view:** `/merchant` shows live carts, orders, revenue, sessions, recommendations, and AI activity.
+| Brief's example direction | Where it lives |
+|---|---|
+| Conversational in-app checkout | `/shop` chat → cart → `/checkout` → Razorpay |
+| Agent-readable catalog | `GET /api/ai/catalog` — structured JSON, no chat required |
+| Upsell & cross-sell agent | `suggestUpsells` tool, ranks real complementary products |
+| Campaign orchestrator | `/merchant` Campaigns panel — activate/deactivate discounts, agent applies them live |
 
-The “bar” is covered by three visible controls:
+**Plus a fifth proof point beyond the four directions:** `scripts/ai-buyer-demo.ts`
+— a standalone script with **zero human interaction** that discovers the
+catalog, decides on a product, builds a cart, and creates a real Razorpay order
+entirely programmatically. This is the literal agent-to-agent case the brief's
+"why now" paragraph opens with.
 
-1. **Explainable:** the assistant recommends only products returned by commerce tools and the checkout explains the amount and payment steps.
-2. **Bounded and gated:** the server owns the session, cart total, product data, Razorpay secret, and payment verification. Checkout opens only after the customer clicks authorization.
-3. **Auditable:** AI tool actions, checkout authorization, Razorpay order creation, payment success, and payment failure are written to `audit_logs`.
+---
 
-## User Demo Flow
+## 4. "The bar" — explainable, bounded, gated, auditable
 
-Use this exact flow for a submission demo:
+1. **Explainable.** Every product recommendation includes a model-generated
+   `reason` tied to the customer's stated budget/use case. Comparisons render
+   as a structured Markdown table with a one-line verdict, not a wall of prose.
+2. **Bounded.** The AI never touches Supabase or Razorpay directly — it can
+   only call a fixed set of server-owned tools (below). The server
+   **independently recalculates the cart total** before creating a Razorpay
+   order; it never trusts a number the model produced.
+3. **Gated.** Checkout only opens after the customer clicks "Authorize
+   purchase." No payment is ever initiated silently.
+4. **Auditable.** Every tool call, checkout authorization, order creation,
+   payment outcome, and campaign change is written to `audit_logs` with a
+   timestamp and metadata. The merchant dashboard reads this live.
+5. **One failure handled gracefully.** A declined/cancelled Razorpay payment
+   shows a clear "Payment declined — your cart is safe, nothing was charged"
+   state with a "Try again" button. The existing order row is reused on retry
+   (no duplicate orders), and the cart is never cleared on failure — only on
+   confirmed success.
 
-1. Open `/shop`.
-2. Enter: `I need a laptop for programming under ₹70,000`.
-3. The agent calls `searchProducts` against the active Supabase catalog. Product cards show real names, prices, attributes, and stock.
-4. Enter: `What accessories go with it?`.
-5. The agent uses conversation context and calls `suggestUpsells` for the relevant laptop.
-6. Enter: `Add the ProBook 14 to my cart`, or click **Add to cart**.
-7. Open `/checkout`.
-8. Review the server-backed cart and click **Authorize purchase**.
-9. The server creates a Razorpay Test Mode order using the database total. Razorpay Checkout opens in the browser.
-10. Complete a Razorpay test payment. The server verifies `razorpay_signature` before marking the order paid.
-11. Open `/merchant` and show the order and recent AI/payment activity.
-12. Repeat with a failed or dismissed payment to demonstrate graceful failure. The order stays unpaid and the failure is audited.
+---
 
-## Application Routes
+## 5. Tech stack
 
-### Pages
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js (App Router) + React + TypeScript, Tailwind CSS |
+| Backend | Next.js Route Handlers |
+| AI | Groq (primary) with Gemini as fallback — same tool-calling contract for both |
+| Database | Supabase (PostgreSQL) |
+| Payments | Razorpay Test Mode |
+| Deployment | Vercel |
 
-| Route | Purpose |
-| --- | --- |
-| `/` | Redirects to the customer storefront. |
-| `/shop` | AI buyer mode, conversational discovery, verified product cards, and cart actions. |
-| `/checkout` | Cart summary, explicit purchase authorization, Razorpay Checkout, and failure state. |
-| `/merchant` | Live merchant metrics, orders, and recent AI activity from Supabase. |
+---
 
-### API Routes
+## 6. Database schema
 
-| Route | Method | Purpose |
-| --- | --- | --- |
-| `/api/agent` | `POST` | Runs Groq first and Gemini as fallback, with commerce tool calling. |
-| `/api/products` | `GET` | Returns active catalog products for storefront loading. |
-| `/api/ai/catalog` | `GET` | Returns a clean machine-readable active catalog for AI buyers. |
-| `/api/cart` | `GET` | Retrieves the active cart for a browser session. |
-| `/api/cart/items` | `POST` | Adds a validated product and quantity to the Supabase cart. |
-| `/api/checkout/order` | `POST` | Recalculates the cart total, creates a Razorpay order, and stores the local order. |
-| `/api/checkout/verify` | `POST` | Verifies the Razorpay payment signature and marks the order paid. |
-| `/api/checkout/failure` | `POST` | Marks a non-paid order failed and writes a failure audit event. |
-| `/api/webhooks/razorpay` | `POST` | Validates Razorpay webhook signatures and handles payment events idempotently. |
-| `/api/merchant` | `GET` | Returns live merchant metrics, order summaries, and audit activity. |
+**products** — `id, name, description, category, price, currency, stock, attributes (jsonb), use_cases (text[]), tags (text[]), active, created_at`
+Prices stored in **rupees**; converted to paise only at the point of calling Razorpay.
 
-## AI Architecture
+**carts** — `id, session_id, status, created_at, updated_at`
+One active cart per browser session — no login required (intentionally out of
+scope, see §16).
 
-The main agent is [app/api/agent/route.ts](app/api/agent/route.ts).
+**cart_items** — `id, cart_id, product_id, quantity, price_at_addition, created_at`
 
-- Groq is the primary model provider.
-- Gemini is the fallback provider when Groq is unavailable.
-- Both providers use the same commerce tools and system rules.
-- The browser sends prior turns as `{ role, content }`; the server sanitizes the last 20 turns.
-- The server always overwrites the model-provided `session_id` with the browser session ID.
-- Tool results are returned to the browser as `tool_results`, allowing the UI to render products from the database rather than rendering invented AI product data.
+**orders** — `id, cart_id, razorpay_order_id, razorpay_payment_id, amount, currency, status, created_at`
+`status` is one of `created | paid | failed`. A failed retry **updates this
+same row** rather than inserting a new one.
 
-Commerce tools live in [lib/agent/tools.ts](lib/agent/tools.ts):
+**audit_logs** — `id, session_id, action, description, metadata (jsonb), created_at`
 
-- `searchProducts`: active, in-stock, ranked catalog search with optional category and price limit.
-- `getProduct`: retrieves one active product by ID.
-- `suggestUpsells`: ranks real accessory/service candidates for a base product.
-- `addToCart`: validates product, quantity, stock, and existing cart quantity before writing to Supabase.
-- `getCart`: returns current items, quantities, subtotal/total, and item count.
+**campaigns** — `id, name, discount_percent, active_category, status, created_at`
+Only one campaign may be `active` at a time; activating one deactivates any
+other.
 
-## Payment Architecture
+Setup script: `supabase/migrations/001_create_campaigns.sql` (and follow-up
+migrations) — run once via Supabase SQL Editor or CLI.
 
-The payment boundary is split deliberately:
+---
 
-1. `/api/checkout/order` receives only `session_id` from the browser.
-2. The server reads the active cart from Supabase and calculates the amount in paise.
-3. The server calls Razorpay using Basic Auth with `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`.
-4. The local `orders` row stores `razorpay_order_id`, amount, currency, and status.
-5. The browser receives only the public Checkout key and order data required by Razorpay.
-6. `/api/checkout/verify` calculates the expected HMAC from `order_id|payment_id` using the server secret and compares it in constant time.
-7. Only then does the order become `paid`.
-8. `payment.captured`, `payment.failed`, and `order.paid` webhooks update the order safely and avoid changing an already-paid order.
+## 7. Agent architecture
 
-The current Supabase `orders` table does **not** contain `session_id`. Do not add that field back to payment inserts or selects without changing the database schema. The implementation links payment activity back to the browser session through the `RAZORPAY_ORDER_CREATED` record in `audit_logs`.
+Main agent route: `app/api/agent/route.ts`
 
-## Data Model Assumptions
+- Groq is the primary provider; Gemini is the fallback when Groq is unavailable.
+- Both providers share the exact same tool-calling contract, defined once in
+  `lib/agent/tools.ts` — behavior is identical regardless of which model answered.
+- The server **always overwrites** the `session_id` the model might produce
+  with the browser's actual session ID — the model never controls session
+  identity.
+- Tool results are returned to the browser as structured `tool_results` and
+  rendered from real database rows — the UI never displays AI-invented
+  product data.
+- Assistant replies are rendered as Markdown (tables, bold, lists) via
+  `react-markdown` + `remark-gfm` — comparisons render as real tables, not
+  raw text.
 
-The application expects these existing Supabase tables:
+**Tools** (`lib/agent/tools.ts`):
 
-- `products`: active catalog records with `id`, `name`, `description`, `category`, `price`, `currency`, `stock`, `attributes`, `use_cases`, `tags`, and `active`.
-- `carts`: active browser-session carts with `id`, `session_id`, and `status`.
-- `cart_items`: cart product rows with `cart_id`, `product_id`, `quantity`, and `price_at_addition`.
-- `orders`: payment records with `id`, `razorpay_order_id`, `razorpay_payment_id`, `amount`, `currency`, `status`, and timestamps.
-- `audit_logs`: activity records with `session_id`, `action`, `description`, `metadata`, and timestamps.
+| Tool | Purpose |
+|---|---|
+| `searchProducts` | Active, in-stock catalog search with optional category/price/tag filters, campaign-aware pricing |
+| `getProduct` | Full details for one product, campaign-aware pricing |
+| `checkInventory` | Verifies stock before purchase |
+| `suggestUpsells` | Ranks real complementary products by shared `use_cases` |
+| `compareProducts` | Normalizes 2–4 products' attributes into a structured diff for table rendering |
+| `addToCart` | Validates product/quantity/stock, writes to Supabase |
+| `calculateCart` | Server-side total, campaign discount applied here — never trusts the model's math |
 
-Prices and product details are always read from Supabase. The browser cannot set the payment amount, product price, order status, or payment result.
+Every tool call is logged to `audit_logs` with its arguments and result.
 
-## Audit Events
+---
 
-The agent currently logs provider/tool activity, and checkout logs these business events:
+## 8. Payment architecture
 
-```text
+The payment boundary is deliberately split so the AI is never in the money path:
+
+1. Browser sends only `{ session_id }` to `POST /api/checkout/order`.
+2. Server reads the **live** cart from Supabase, applies any active campaign
+   discount, and computes the amount independently — in paise, for Razorpay.
+3. Server calls Razorpay using Basic Auth (`RAZORPAY_KEY_ID` /
+   `RAZORPAY_KEY_SECRET` — server-only, never sent to the client).
+4. Local `orders` row stores the Razorpay order ID, amount, and status.
+5. Browser receives only the public Checkout key + order data needed to open
+   Razorpay Checkout.
+6. `POST /api/checkout/verify` recomputes the expected HMAC signature from
+   `order_id|payment_id` using the server secret and compares it — **only
+   then** does the order become `paid`.
+7. `POST /api/webhooks/razorpay` independently verifies Razorpay's webhook
+   signature and updates order status idempotently (`payment.captured`,
+   `payment.failed`, `order.paid`) — safe against replays and out-of-order
+   delivery.
+8. On confirmed success, the cart is cleared and marked `checked_out`. On
+   failure, the cart is left untouched and the existing order row is reused
+   on retry.
+
+**Known constraint:** Razorpay cannot call `localhost`. Webhook testing
+requires the deployed HTTPS URL or a tunnel (`ngrok http 3000`) with the
+webhook temporarily repointed — always reset it to the production URL
+afterward.
+
+---
+
+## 9. Campaign orchestrator
+
+- `/merchant` → Campaigns panel lists all campaigns with Activate/Deactivate
+  actions and a "New campaign" form (name, discount %, category).
+- Activating a campaign deactivates any other active one and writes a
+  `CAMPAIGN_ACTIVATED` audit event.
+- The agent fetches the active campaign before answering — if one applies to
+  a product's category, the agent quotes the **discounted** price (never the
+  original), and `calculateCart`/checkout apply the same discount server-side.
+  Verified in testing: a 10%-off campaign on an ₹58,999 item correctly quoted
+  and charged ₹53,099 throughout chat, cart, and checkout.
+- `campaign_influenced_orders` on the dashboard counts orders created while a
+  campaign was active, joined against `audit_logs` timestamps.
+
+---
+
+## 10. Agent-to-agent proof (`scripts/ai-buyer-demo.ts`)
+
+A standalone Node/TypeScript script, run outside the browser entirely:
+
+```bash
+npx tsx scripts/ai-buyer-demo.ts
+```
+
+1. `GET /api/ai/catalog` — fetches the machine-readable catalog
+2. Filters products programmatically against a hardcoded intent (price ≤
+   ₹70,000, tag includes "coding") — no LLM call, pure logic, representing a
+   rules-based or agent-decided intent
+3. Generates a fresh `session_id`, adds the selected product to a new cart
+   via `POST /api/cart/items`
+4. Creates a real Razorpay test order via `POST /api/checkout/order` — the
+   server recalculates the amount exactly as it would for a human checkout
+5. Logs every step with a timestamp, prefixed `[AI BUYER]`
+
+This intentionally stops at order creation, not `paid` — actual payment
+capture requires Razorpay's Checkout UI (a browser), which is identical to
+the already-proven human flow. The script's job is to prove the
+**discovery → decision → order** pipeline works with zero human input; the
+signature-verified payment step underneath is the same code path already
+demonstrated live.
+
+---
+
+## 11. Audit events (non-exhaustive)
+
+```
 PRODUCT_SEARCH / searchProducts
 PRODUCT_RECOMMENDATION / assistant_response
 UPSELL_SUGGESTED / suggestUpsells
+compareProducts
 CART_ITEM_ADDED
 CHECKOUT_STARTED
 RAZORPAY_ORDER_CREATED
-PAYMENT_SUCCESS
-PAYMENT_FAILED
+PAYMENT_SUCCESS / PAYMENT_FAILED
+CAMPAIGN_ACTIVATED / CAMPAIGN_DEACTIVATED
+Razorpay webhook: order.paid / payment.failed
 ```
 
-Audit metadata may include product IDs, order IDs, payment IDs, amounts, provider, tool arguments, and tool results. Secrets must never be written to metadata.
+Metadata may include product IDs, order IDs, payment IDs, amounts, provider,
+and tool arguments/results. **Secrets are never written to audit metadata.**
 
-## Environment Setup
+---
 
-Create `.env.local` locally. Never commit it. Use [.env.example](.env.example) only as a blank variable-name template.
+## 12. Environment variables
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=...
-SUPABASE_SERVICE_ROLE_KEY=...
-GROQ_API_KEY=...
-GEMINI_API_KEY=...
+NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=       # server-only
+GROQ_API_KEY=
+GEMINI_API_KEY=
 RAZORPAY_KEY_ID=rzp_test_...
-RAZORPAY_KEY_SECRET=...
+RAZORPAY_KEY_SECRET=             # server-only
 NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_...
-RAZORPAY_WEBHOOK_SECRET=...
+RAZORPAY_WEBHOOK_SECRET=         # different from the API secret
 ```
 
-Razorpay setup:
+Never commit `.env.local`. `.env.example` holds blank variable names only.
 
-1. Switch the Razorpay Dashboard to **Test Mode**.
-2. Open **Account & Settings -> API Keys** and generate a test key pair.
-3. Put the Key ID in both `RAZORPAY_KEY_ID` and `NEXT_PUBLIC_RAZORPAY_KEY_ID`.
-4. Put the API Secret only in `RAZORPAY_KEY_SECRET`.
-5. After deployment, create a webhook at `https://<domain>/api/webhooks/razorpay`.
-6. Create a separate webhook signing secret and put it in `RAZORPAY_WEBHOOK_SECRET`.
-7. Subscribe to `payment.captured`, `payment.failed`, and `order.paid`.
+---
 
-The webhook secret is different from the Razorpay API Secret. Razorpay cannot call `localhost`; use the deployed HTTPS URL or a tunnel such as `ngrok http 3000` for local webhook testing.
-
-## Run and Deploy
-
-From the project directory:
+## 13. Running locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000/shop`.
+Open `http://localhost:3000/shop`. Note: Razorpay **cannot** call `localhost`
+for webhooks — full paid-status confirmation only works on the deployed URL
+(or via an ngrok tunnel, temporarily repointed).
 
-For deployment:
+## 14. Deploying
 
-1. Import `jd-thakrar/ai-commerce-agent` into Vercel.
-2. Add all variables above under **Project Settings -> Environment Variables** for Production and Preview.
-3. Deploy or redeploy after changing variables.
-4. Configure the Razorpay webhook with the generated Vercel HTTPS URL.
-5. Test `/shop`, `/checkout`, `/merchant`, and `/api/ai/catalog` on the deployed domain.
+1. Push to `main` — Vercel auto-deploys from this branch.
+2. Set all environment variables above under Vercel → Project Settings →
+   Environment Variables (Production + Preview).
+3. Configure the Razorpay webhook to
+   `https://<your-domain>/api/webhooks/razorpay`, subscribed to
+   `payment.captured`, `payment.failed`, `order.paid`.
+4. **`scripts/` is excluded from the production TypeScript build** (see
+   `tsconfig.json` `exclude`) — it's a standalone dev/demo tool, not part of
+   the deployed app, and should never block a production build.
 
-## Validation Commands
+---
 
-```bash
-npx tsc --noEmit
-npm run lint
-npm run build
-```
+## 15. Demo script (~5 minutes)
 
-TypeScript and the production build are expected to pass. The repository still contains legacy ESLint `any` violations in older files; these are lint debt and are separate from the runtime payment path.
+1. **(0:00–0:30)** State the problem: agent-to-agent commerce is the open
+   problem of the year; TechNova is the safety layer that makes a merchant
+   safely transactable by an AI buyer.
+2. **(0:30–1:30)** `/shop`: "I need a laptop for coding under ₹70,000" →
+   agent recommends with stated reasoning, real catalog data.
+3. **(1:30–2:15)** "Compare ProBook 14 and CodeBook Pro" → renders as a real
+   Markdown table with a one-line verdict. Add an upsell.
+4. **(2:15–3:00)** `/checkout` → review the guardrails panel → authorize →
+   Razorpay opens.
+5. **(3:00–3:45)** Trigger one declined payment → show the graceful failure
+   state → "Try again" → succeed. Point out: same order row reused, cart
+   never lost.
+6. **(3:45–4:15)** `/merchant` → activate a campaign live → show the agent
+   immediately quoting the discounted price in chat and at checkout.
+7. **(4:15–4:45)** Run `npx tsx scripts/ai-buyer-demo.ts` live in a terminal
+   — narrate: *"Everything so far was a human using our agent. This is a
+   different AI agent buying with zero human input — the actual
+   agent-to-agent case this track is built around."*
+8. **(4:45–5:00)** `/merchant` dashboard — audit trail, revenue, conversion,
+   campaign-influenced orders — all provably correct, not decorative.
 
-## Claude Handoff Notes
+---
 
-Before changing behavior, read these files in this order:
+## 16. What we deliberately did not build
 
-1. [README.md](README.md) for this scenario and the current schema assumptions.
-2. [app/api/agent/route.ts](app/api/agent/route.ts) for provider fallback, history, tool execution, and session ownership.
-3. [lib/agent/tools.ts](lib/agent/tools.ts) for catalog, upsell, cart, stock, and total behavior.
-4. [lib/commerce.ts](lib/commerce.ts) for audit, Razorpay requests, signatures, and order-to-session lookup.
-5. The relevant route under [app/api](app/api) before changing any database contract.
-6. The page under [app/shop](app/shop), [app/checkout](app/checkout), or [app/merchant](app/merchant) for UI changes.
+No scraped e-commerce platform · no real-money transactions · no custom ML
+training · no microservices/Kubernetes · no multi-merchant system · no mobile
+app · no user authentication/account system · no vector database.
 
-Do not:
+These are out of scope for the track's actual bar (explainable / bounded /
+gated / auditable), not oversights — session-based carts are a legitimate,
+standard pattern at this scope, and building any of the above would trade
+correctness on what's actually judged for surface area that isn't.
 
-- Put secrets in client components, `.env.example`, Git, or audit metadata.
-- Trust price, amount, product details, status, or payment success from the browser.
-- Reintroduce `orders.session_id` unless the Supabase schema is intentionally migrated.
-- Claim a payment succeeded before signature verification or a trusted webhook.
-- Replace real catalog data with hardcoded products in the recommendation flow.
-- Remove the explicit authorization step before opening Razorpay.
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 17. Verified correctness (not just "it runs")
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Checkout total independently hand-verified against line items (₹1,35,998 +
+  ₹899 + ₹1,17,998 + ₹42,999 = ₹2,97,894 ✓)
+- Campaign discount math verified (₹58,999 × 0.90 = ₹53,099 ✓, applied
+  consistently in chat, catalog, and checkout)
+- Dashboard revenue verified as sum of `paid`-status orders only
+- Conversion rate verified as `paid orders / carts created`, clamped to 100%
+- Failed-payment retry verified to reuse the existing order row, not create
+  a duplicate
+- Real Razorpay order (`order_TYDM23gycTN2cu`, ₹69,499) cross-checked
+  directly against the Razorpay dashboard, confirming server-side amount
+  calculation is correct end to end
