@@ -32,6 +32,7 @@ export type ToolArgs = ToolContext & Record<string, any>;
 function normalize(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
+
 function extractProcessorTier(processor: unknown): number {
   const match = String(processor ?? "").match(/(\d+)/);
   return match ? parseInt(match[1], 10) : 0;
@@ -105,6 +106,10 @@ export async function searchProducts(args: ToolArgs) {
     ? extractProcessorTier(args.processor_min)
     : 0;
 
+  const processorAboveTier = args.processor_above
+    ? extractProcessorTier(args.processor_above)
+    : 0;
+
   const maxPrice =
     args.max_price !== undefined
       ? Number(args.max_price)
@@ -145,7 +150,7 @@ export async function searchProducts(args: ToolArgs) {
     };
   }
 
-   const products = (data || []) as Product[];
+  const products = (data || []) as Product[];
   const campaign = await getActiveCampaign();
   let pricedProducts = products.map((product) => withCampaignPrice(product, campaign));
 
@@ -154,9 +159,16 @@ export async function searchProducts(args: ToolArgs) {
       normalize((product.attributes as any)?.processor).includes(processor)
     );
   }
-    if (processorMinTier > 0) {
+
+  if (processorMinTier > 0) {
     pricedProducts = pricedProducts.filter((product) =>
       extractProcessorTier((product.attributes as any)?.processor) >= processorMinTier
+    );
+  }
+
+  if (processorAboveTier > 0) {
+    pricedProducts = pricedProducts.filter((product) =>
+      extractProcessorTier((product.attributes as any)?.processor) > processorAboveTier
     );
   }
 
@@ -774,7 +786,7 @@ export const toolDeclarations = [
           description:
             "Optional category such as Laptop, Accessory, or Service.",
         },
-              max_price: {
+        max_price: {
           type: Type.NUMBER,
           description:
             "Optional maximum price in INR.",
@@ -784,16 +796,20 @@ export const toolDeclarations = [
           description:
             "Optional exact processor filter, e.g. 'i5', 'i3', 'Ryzen 5'. Use this whenever the customer specifies a chip requirement — do not rely on the free-text query for this.",
         },
-                processor_min: {
+        processor_min: {
           type: Type.STRING,
           description:
             "Use this instead of 'processor' when the customer asks for a MINIMUM tier — e.g. 'i5 or better', 'at least Ryzen 5', 'minimum i5'. Pass the tier they named (e.g. 'i5'); this returns that tier AND anything stronger (i7, i9, Ryzen 7, etc).",
+        },
+        processor_above: {
+          type: Type.STRING,
+          description:
+            "Use this when the customer asks for STRICTLY BETTER than a named tier — e.g. 'above i5', 'better than Ryzen 5', 'stronger than i5'. Pass the tier named (e.g. 'i5'); this excludes that tier and returns only anything strictly stronger (i7, i9, etc). Do not use processor_min for this — that would incorrectly include i5 itself.",
         },
       },
       required: ["query"],
     },
   },
-
 
   {
     name: "getProduct",
@@ -919,7 +935,7 @@ export const groqToolDeclarations = [
             description:
               "Optional category such as Laptop, Accessory, or Service.",
           },
-                  max_price: {
+          max_price: {
             type: "number",
             description:
               "Optional maximum price in INR.",
@@ -929,11 +945,16 @@ export const groqToolDeclarations = [
             description:
               "Optional exact processor filter, e.g. 'i5', 'i3', 'Ryzen 5'. Use this whenever the customer specifies a chip requirement — do not rely on the free-text query for this.",
           },
-                  processor_min: {
-          type: Type.STRING,
-          description:
-            "Use this instead of 'processor' when the customer asks for a MINIMUM tier — e.g. 'i5 or better', 'at least Ryzen 5', 'minimum i5'. Pass the tier they named (e.g. 'i5'); this returns that tier AND anything stronger (i7, i9, Ryzen 7, etc).",
-        },
+          processor_min: {
+            type: "string",
+            description:
+              "Use this instead of 'processor' when the customer asks for a MINIMUM tier — e.g. 'i5 or better', 'at least Ryzen 5', 'minimum i5'. Pass the tier they named (e.g. 'i5'); this returns that tier AND anything stronger (i7, i9, Ryzen 7, etc).",
+          },
+          processor_above: {
+            type: "string",
+            description:
+              "Use this when the customer asks for STRICTLY BETTER than a named tier — e.g. 'above i5', 'better than Ryzen 5', 'stronger than i5'. Pass the tier named (e.g. 'i5'); this excludes that tier and returns only anything strictly stronger (i7, i9, etc). Do not use processor_min for this — that would incorrectly include i5 itself.",
+          },
         },
         required: ["query"],
       },
